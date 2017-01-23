@@ -48,7 +48,7 @@ namespace HidSharp.Test
 			Console.WriteLine("Opening HID class device...");
 
 #if SAMPLE_OPEN_AND_READ
-			var device = loader.GetDevices(0x1b1c, 0x0c04).First();
+			var device = loader.GetDevices(0x416, 0x5020).First();
             if (device == null) { Console.WriteLine("Failed to open device."); Environment.Exit(1); }
 
             Console.Write(@"

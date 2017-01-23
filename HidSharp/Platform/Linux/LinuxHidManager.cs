@@ -93,7 +93,7 @@ namespace HidSharp.Platform.Linux
 						}
 					}
                 }
-				catch
+				catch(Exception ex)
 				{
 					
 				}

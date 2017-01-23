@@ -24,7 +24,7 @@ namespace HidSharp.Platform.Linux
 {
     static class NativeMethods
     {
-		const string libc = "libc";
+		const string libc = "libc.so.6";
 		const string libudev = "libudev.so.1";
 
 		public enum error
@@ -104,21 +104,15 @@ namespace HidSharp.Platform.Linux
         {
             sysname = null; release = null; machine = null;
 
-            string syscallPath = "Mono.Unix.Native.Syscall, Mono.Posix, PublicKeyToken=0738eb9f132ed756";
-            var syscall = Type.GetType(syscallPath);
-            if (syscall == null) { return false; }
+			Mono.Unix.Native.Utsname test;
+			Mono.Unix.Native.Syscall.uname (out test);
 
-            var unameArgs = new object[1];
-            int unameRet = (int)syscall.InvokeMember("uname",
-                                                     BindingFlags.InvokeMethod | BindingFlags.Static, null, null, unameArgs,
-                                                     CultureInfo.InvariantCulture);
-            if (unameRet < 0) { return false; }
+			release = test.release;
 
-            var uname = unameArgs[0];
-			Func<string, string> getMember = s => (string)uname.GetType().InvokeMember(s,
-                                                                                       BindingFlags.GetField, null, uname, new object[0],
-                                                                                       CultureInfo.InvariantCulture);
-            sysname = getMember("sysname"); release = getMember("release"); machine = getMember("machine");
+			sysname = test.sysname;
+
+			machine = test.machine;
+
             return true;
         }
 		

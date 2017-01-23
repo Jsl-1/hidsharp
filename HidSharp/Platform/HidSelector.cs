@@ -30,6 +30,7 @@ namespace HidSharp.Platform
                     new Windows.WinHidManager(),
                     new Linux.LinuxHidManager(),
                     new MacOS.MacHidManager(),
+					//new Libusb.LibusbHidManager(),
                     new Unsupported.UnsupportedHidManager()
                 })
             {
