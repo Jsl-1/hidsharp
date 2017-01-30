@@ -53,7 +53,7 @@ namespace HidSharp.Platform.Linux
             if (null == devnode) { return false; }
             
             int handle = NativeMethods.retry(() => NativeMethods.open
-                                        (devnode, NativeMethods.oflag.NONBLOCK));
+				(devnode, NativeMethods.oflag.RDONLY));
             if (handle < 0) { return false; }
 
             try
@@ -117,7 +117,10 @@ namespace HidSharp.Platform.Linux
                                         _maxInput = parser.InputReportMaxLength; if (_maxInput > 0) { _maxInput++; }
                                         _maxOutput = parser.OutputReportMaxLength; if (_maxOutput > 0) { _maxOutput++; }
                                         _maxFeature = parser.FeatureReportMaxLength; if (_maxFeature > 0) { _maxFeature++; }
-                                        _reportsUseID = parser.ReportsUseID;
+										_reportsUseID = parser.ReportsUseID;
+
+										//_maxInput++;
+										//_maxOutput--;
                                         return true;
                                     }
                                 }

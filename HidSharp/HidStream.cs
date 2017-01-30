@@ -42,8 +42,8 @@ namespace HidSharp
 		
         internal HidStream()
         {
-            ReadTimeout = 3000;
-            WriteTimeout = 3000;
+            ReadTimeout = 100;
+            WriteTimeout = 100;
         }
 		
 		internal static int GetTimeout(int startTime, int timeout)

@@ -23,27 +23,27 @@ using System.Threading;
 
 namespace HidSharp.Platform.Linux
 {
-    class LinuxHidStream : HidStream
-    {
+	class LinuxHidStream : HidStream
+	{
 		Queue<byte[]> _inputQueue;
 		Queue<CommonOutputReport> _outputQueue;
-		
+
 		LinuxHidDevice _device;
 		int _handle;
-		Thread _readThread, _writeThread;
+		Thread _readThread; //, _writeThread;
 		volatile bool _shutdown;
-		
-        internal LinuxHidStream()
-        {
+
+		internal LinuxHidStream()
+		{
 			_inputQueue = new Queue<byte[]>();
 			_outputQueue = new Queue<CommonOutputReport>();
 			_handle = -1;
 			_readThread = new Thread(ReadThread);
 			_readThread.IsBackground = true;
-			_writeThread = new Thread(WriteThread);
-			_writeThread.IsBackground = true;
-        }
-		
+			//_writeThread = new Thread(WriteThread);
+			//_writeThread.IsBackground = true;
+		}
+
 		static int DeviceHandleFromPath(string path)
 		{
 			IntPtr udev = NativeMethods.udev_new();
@@ -60,7 +60,7 @@ namespace HidSharp.Platform.Linux
 							if (devnode != null)
 							{
 								int handle = NativeMethods.retry(() => NativeMethods.open
-								                            (devnode, NativeMethods.oflag.RDWR | NativeMethods.oflag.NONBLOCK));
+									(devnode, NativeMethods.oflag.RDWR | NativeMethods.oflag.NONBLOCK));
 								if (handle < 0)
 								{
 									var error = (NativeMethods.error)Marshal.GetLastWin32Error();
@@ -87,47 +87,47 @@ namespace HidSharp.Platform.Linux
 					NativeMethods.udev_unref(udev);
 				}
 			}
-			
+
 			throw new FileNotFoundException("HID class device not found.");
 		}
-		
-        internal void Init(string path, LinuxHidDevice device)
-        {
+
+		internal void Init(string path, LinuxHidDevice device)
+		{
 			int handle;
 			handle = DeviceHandleFromPath(path);
-			
+
 			_device = device;
 			_handle = handle;
 			HandleInitAndOpen();
-			
+
 			_readThread.Start();
-			_writeThread.Start();
-        }
-		
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
+			//_writeThread.Start();
+		}
+
+		protected override void Dispose(bool disposing)
+		{
+			base.Dispose(disposing);
 			if (!HandleClose()) { return; }
-			
-            _shutdown = true;
-            try { lock (_inputQueue) { Monitor.PulseAll(_inputQueue); } } catch { }
+
+			_shutdown = true;
+			try { lock (_inputQueue) { Monitor.PulseAll(_inputQueue); } } catch { }
 			try { lock (_outputQueue) { Monitor.PulseAll(_outputQueue); } } catch { }
 
-            try { _readThread.Join(); } catch { }
-            try { _writeThread.Join(); } catch { }
+			try { _readThread.Join(); } catch { }
+			//try { _writeThread.Join(); } catch { }
 
 			HandleRelease();
 		}
-		
+
 		internal override void HandleFree()
 		{
 			NativeMethods.retry(() => NativeMethods.close(_handle)); _handle = -1;
 		}
-		
+
 		unsafe void ReadThread()
 		{
 			if (!HandleAcquire()) { return; }
-			
+
 			try
 			{
 				lock (_inputQueue)
@@ -137,45 +137,45 @@ namespace HidSharp.Platform.Linux
 						var fds = new NativeMethods.pollfd[1];
 						fds[0].fd = _handle;
 						fds[0].events = NativeMethods.pollev.IN;
-						
+
 						while (!_shutdown)
 						{
-						tryReadAgain:
+							tryReadAgain:
 							int ret;
 							Monitor.Exit(_inputQueue);
 							try { ret = NativeMethods.retry(() => NativeMethods.poll(fds, (IntPtr)1, 250)); }
 							finally { Monitor.Enter(_inputQueue); }
 							if (ret != 1) { continue; }
-							
+
 							if (0 != (fds[0].revents & (NativeMethods.pollev.ERR | NativeMethods.pollev.HUP))) { break; }
 							if (0 != (fds[0].revents & NativeMethods.pollev.IN))
 							{
-                                // Linux doesn't provide a Report ID if the device doesn't use one.
-                                int inputLength = _device.MaxInputReportLength;
-                                if (inputLength > 0 && !_device.ReportsUseID) { inputLength--; }
+								// Linux doesn't provide a Report ID if the device doesn't use one.
+								int inputLength = _device.MaxInputReportLength;
+								if (inputLength > 0 && !_device.ReportsUseID) { inputLength--; }
 
-                                byte[] inputReport = new byte[inputLength];
+								byte[] inputReport = new byte[inputLength];
 								fixed (byte* inputBytes = inputReport)
 								{
-                                    var inputBytesPtr = (IntPtr)inputBytes;
+									var inputBytesPtr = (IntPtr)inputBytes;
 									IntPtr length = NativeMethods.retry(() => NativeMethods.read
-									                               (_handle, inputBytesPtr, (IntPtr)inputReport.Length));
+										(_handle, inputBytesPtr, (IntPtr)inputReport.Length));
 									if ((long)length < 0)
 									{
-                                        var error = (NativeMethods.error)Marshal.GetLastWin32Error();
+										var error = (NativeMethods.error)Marshal.GetLastWin32Error();
 										if (error != NativeMethods.error.EAGAIN) { break; }
 										goto tryReadAgain;
 									}
 
 									Array.Resize(ref inputReport, (int)length); // No Report ID? First byte becomes Report ID 0.
-                                    if (!_device.ReportsUseID) { inputReport = new byte[1].Concat(inputReport).ToArray(); }
+									if (!_device.ReportsUseID) { inputReport = new byte[1].Concat(inputReport).ToArray(); }
 									_inputQueue.Enqueue(inputReport); Monitor.PulseAll(_inputQueue);
 								}
 							}
 						}
 						while (!_shutdown && _inputQueue.Count == 0) { Monitor.Wait(_inputQueue); }
 						if (_shutdown) { break; }
-						
+
 						_inputQueue.Dequeue();
 					}
 				}
@@ -185,85 +185,105 @@ namespace HidSharp.Platform.Linux
 				HandleRelease();
 			}
 		}
-		
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            return CommonRead(buffer, offset, count, _inputQueue);
-        }
 
-        public override void GetFeature(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException(); // TODO
-        }
-
-		unsafe void WriteThread()
+		public override int Read(byte[] buffer, int offset, int count)
 		{
-			if (!HandleAcquire()) { return; }
-			
-			try
-			{
-				lock (_outputQueue)
+			return CommonRead(buffer, offset, count, _inputQueue);
+		}
+
+		public override void GetFeature(byte[] buffer, int offset, int count)
+		{
+			throw new NotSupportedException(); // TODO
+		}
+
+//		unsafe void WriteThread()
+//		{
+//			if (!HandleAcquire()) { return; }
+//
+//			try
+//			{
+//				lock (_outputQueue)
+//				{
+//					while (true)
+//					{
+//						while (!_shutdown && _outputQueue.Count == 0) { Monitor.Wait(_outputQueue); }
+//						if (_shutdown) { break; }
+//
+//						CommonOutputReport outputReport = _outputQueue.Peek();
+//
+//						// Linux doesn't expect a Report ID if the device doesn't use one.
+//						byte[] outputBytesRaw = outputReport.Bytes;
+//						if (!_device.ReportsUseID && outputBytesRaw.Length > 0) { outputBytesRaw = outputBytesRaw.Skip(1).ToArray(); }
+//
+//						try
+//						{
+//							fixed (byte* outputBytes = outputBytesRaw)
+//							{
+//								// hidraw is apparently blocking for output, even when O_NONBLOCK is used.
+//								// See for yourself at drivers/hid/hidraw.c...
+//								IntPtr length;
+//								Monitor.Exit(_outputQueue);
+//								try
+//								{
+//									var outputBytesPtr = (IntPtr)outputBytes;
+//									length = NativeMethods.retry(() => NativeMethods._write
+//										(_handle, outputBytesPtr, (IntPtr)outputBytesRaw.Length));
+//									if ((long)length == outputBytesRaw.Length) { outputReport.DoneOK = true; }
+//								}
+//								finally
+//								{
+//									Monitor.Enter(_outputQueue);
+//								}
+//							}
+//						}
+//						finally
+//						{
+//							_outputQueue.Dequeue();
+//							outputReport.Done = true;
+//							Monitor.PulseAll(_outputQueue);
+//						}	
+//					}
+//				}
+//			}
+//			finally
+//			{
+//				HandleRelease();
+//			}
+//		}
+
+		public override void Write(byte[] buffer, int offset, int count)
+		{
+
+			_Write (buffer, offset, count);
+
+//			CommonWrite(buffer, offset, count, _outputQueue, false, _device.MaxOutputReportLength);
+		}
+
+		private unsafe void _Write(byte[] buffer, int offset, int count)
+		{
+			byte[] outputBytesRaw = buffer;
+			//if (!_device.ReportsUseID && outputBytesRaw.Length > 0) { outputBytesRaw = outputBytesRaw.Skip(1).ToArray(); }
+			fixed (byte* outputBytes = outputBytesRaw) {
+
+				var outputBytesPtr = (IntPtr)outputBytes;
+				var length = NativeMethods.retry(() => NativeMethods.write
+					(_handle, outputBytesPtr, (IntPtr)outputBytesRaw.Length));
+				if ((long)length != outputBytesRaw.Length) 
 				{
-					while (true)
-					{
-						while (!_shutdown && _outputQueue.Count == 0) { Monitor.Wait(_outputQueue); }
-						if (_shutdown) { break; }
-
-						CommonOutputReport outputReport = _outputQueue.Peek();
-
-                        // Linux doesn't expect a Report ID if the device doesn't use one.
-                        byte[] outputBytesRaw = outputReport.Bytes;
-                        if (!_device.ReportsUseID && outputBytesRaw.Length > 0) { outputBytesRaw = outputBytesRaw.Skip(1).ToArray(); }
-
-						try
-						{
-							fixed (byte* outputBytes = outputBytesRaw)
-							{
-								// hidraw is apparently blocking for output, even when O_NONBLOCK is used.
-								// See for yourself at drivers/hid/hidraw.c...
-                                IntPtr length;
-                                Monitor.Exit(_outputQueue);
-                                try
-                                {
-                                    var outputBytesPtr = (IntPtr)outputBytes;
-                                    length = NativeMethods.retry(() => NativeMethods.write
-                                                            (_handle, outputBytesPtr, (IntPtr)outputBytesRaw.Length));
-                                    if ((long)length == outputBytesRaw.Length) { outputReport.DoneOK = true; }
-                                }
-                                finally
-                                {
-                                    Monitor.Enter(_outputQueue);
-                                }
-							}
-						}
-						finally
-						{
-							_outputQueue.Dequeue();
-                            outputReport.Done = true;
-							Monitor.PulseAll(_outputQueue);
-						}	
-					}
+					throw new IOException ();
 				}
-			}
-			finally
-			{
-				HandleRelease();
+
 			}
 		}
-		
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            CommonWrite(buffer, offset, count, _outputQueue, false, _device.MaxOutputReportLength);
-        }
 
-        public override void SetFeature(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException(); // TODO
-        }
+		public override void SetFeature(byte[] buffer, int offset, int count)
+		{
+			throw new NotSupportedException(); // TODO
+		}
 
-        public override HidDevice Device
-        {
-            get { return _device; }
-        }
-    }
+		public override HidDevice Device
+		{
+			get { return _device; }
+		}
+	}
 }

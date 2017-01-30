@@ -128,6 +128,9 @@ namespace HidSharp.Platform.Linux
 		public static extern IntPtr read(int filedes, IntPtr buffer, IntPtr size);
 		
 		[DllImport(libc, SetLastError = true)]
+		public static extern IntPtr _write(int filedes, IntPtr buffer, IntPtr size);
+
+		[DllImport(libc, SetLastError = true)]
 		public static extern IntPtr write(int filedes, IntPtr buffer, IntPtr size);
 
 		[DllImport(libc, SetLastError = true)]
